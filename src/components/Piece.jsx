@@ -31,3 +31,4 @@ export default function Piece({ piece, from }) {
     </span>
   );
 }
+

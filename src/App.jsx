@@ -1,4 +1,4 @@
-import Board from "./components/Board";
+import Board from "./components/Board.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   ADVANCED_PLACEMENT_REGIONS,
@@ -997,180 +997,180 @@ export default function App() {
                       </p>
                     ) : null}
                     <div className="palette-row">
-              {["king", ...MEDIUM_PIECES].map((piece) => {
-                const limit = piece === "king" ? 1 : frequencies[piece];
-                const placed = whitePlacedCounts[piece];
-                const remaining = Math.max(0, limit - placed);
-                return (
-                  <button
-                    key={piece}
-                    type="button"
-                    className={`palette-piece ${placementPiece === piece ? "active" : ""}`}
-                    onClick={() => setPlacementPiece(piece)}
-                    draggable={remaining > 0}
-                    onDragStart={(event) =>
-                      event.dataTransfer.setData("application/white-piece", JSON.stringify({ type: piece }))
-                    }
-                  >
-                    {WHITE_UNICODE[piece]} {PIECE_LABELS[piece]} ({remaining})
-                  </button>
-                );
-              })}
-              <button type="button" onClick={() => setWhiteLayout(createEmptyLayout(rows, cols))}>
-                Clear white setup
-              </button>
-            </div>
-
-            <div
-              className="placement-board"
-              style={{
-                gridTemplateColumns: `repeat(${cols}, 42px)`,
-                width: `calc(${cols} * 42px)`
-              }}
-            >
-              {whiteLayout.map((row, rowIndex) =>
-                row.map((piece, colIndex) => {
-                  const isLight = (rowIndex + colIndex) % 2 === 0;
-                  const canPlaceHere = whitePlacementAllowed(rowIndex, colIndex, rows, cols);
-                  const showFairSymmetry =
-                    !useCombinedPlacementBoard && (mode === "advanced" || mode === "medium");
-                  const blackPartner =
-                    showFairSymmetry &&
-                    isBlackPartnerPlacementAllowed(
-                      mode,
-                      rowIndex,
-                      colIndex,
-                      rows,
-                      cols,
-                      advancedPlacementRegion
-                    );
-                  const partnerR = rows - 1 - rowIndex;
-                  const partnerC = cols - 1 - colIndex;
-                  const ghostBlackPiece = showFairSymmetry ? whiteLayout[partnerR]?.[partnerC] ?? null : null;
-                  const squareBlocked = !canPlaceHere && !blackPartner;
-                  return (
-                    <button
-                      key={`${rowIndex}-${colIndex}`}
-                      type="button"
-                      className={`placement-square ${isLight ? "light" : "dark"} ${
-                        canPlaceHere ? "allowed-zone" : ""
-                      } ${blackPartner ? "black-partner-zone" : ""} ${squareBlocked ? "blocked" : ""}`}
-                      onClick={() => {
-                        if (!canPlaceHere) return;
-                        let nextPalette = null;
-                        setWhiteLayout((current) => {
-                          const next = cloneLayout(current);
-                          const existing = next[rowIndex][colIndex];
-                          if (existing) {
-                            if (existing === placementPiece) {
-                              next[rowIndex][colIndex] = null;
-                              return next;
+                      {["king", ...MEDIUM_PIECES].map((piece) => {
+                        const limit = piece === "king" ? 1 : frequencies[piece];
+                        const placed = whitePlacedCounts[piece];
+                        const remaining = Math.max(0, limit - placed);
+                        return (
+                          <button
+                            key={piece}
+                            type="button"
+                            className={`palette-piece ${placementPiece === piece ? "active" : ""}`}
+                            onClick={() => setPlacementPiece(piece)}
+                            draggable={remaining > 0}
+                            onDragStart={(event) =>
+                              event.dataTransfer.setData("application/white-piece", JSON.stringify({ type: piece }))
                             }
-                            const trial = cloneLayout(current);
-                            trial[rowIndex][colIndex] = placementPiece;
-                            if (!layoutWithinLimits(trial, frequencies)) return current;
-                            next[rowIndex][colIndex] = placementPiece;
-                            nextPalette = existing;
-                            return next;
-                          }
-                          const limit = placementPiece === "king" ? 1 : frequencies[placementPiece];
-                          const placed = whitePlacedCounts[placementPiece];
-                          if (placed >= limit) return current;
-                          next[rowIndex][colIndex] = placementPiece;
-                          return next;
-                        });
-                        if (nextPalette !== null) setPlacementPiece(nextPalette);
-                      }}
-                      draggable={Boolean(piece)}
-                      onDragStart={(event) => {
-                        if (!piece) return;
-                        event.dataTransfer.setData(
-                          "application/white-piece",
-                          JSON.stringify({ type: piece, from: [rowIndex, colIndex] })
+                          >
+                            {WHITE_UNICODE[piece]} {PIECE_LABELS[piece]} ({remaining})
+                          </button>
                         );
+                      })}
+                      <button type="button" onClick={() => setWhiteLayout(createEmptyLayout(rows, cols))}>
+                        Clear white setup
+                      </button>
+                    </div>
+
+                    <div
+                      className="placement-board"
+                      style={{
+                        gridTemplateColumns: `repeat(${cols}, 42px)`,
+                        width: `calc(${cols} * 42px)`
                       }}
+                    >
+                      {whiteLayout.map((row, rowIndex) =>
+                        row.map((piece, colIndex) => {
+                          const isLight = (rowIndex + colIndex) % 2 === 0;
+                          const canPlaceHere = whitePlacementAllowed(rowIndex, colIndex, rows, cols);
+                          const showFairSymmetry =
+                            !useCombinedPlacementBoard && (mode === "advanced" || mode === "medium");
+                          const blackPartner =
+                            showFairSymmetry &&
+                            isBlackPartnerPlacementAllowed(
+                              mode,
+                              rowIndex,
+                              colIndex,
+                              rows,
+                              cols,
+                              advancedPlacementRegion
+                            );
+                          const partnerR = rows - 1 - rowIndex;
+                          const partnerC = cols - 1 - colIndex;
+                          const ghostBlackPiece = showFairSymmetry ? whiteLayout[partnerR]?.[partnerC] ?? null : null;
+                          const squareBlocked = !canPlaceHere && !blackPartner;
+                          return (
+                            <button
+                              key={`${rowIndex}-${colIndex}`}
+                              type="button"
+                              className={`placement-square ${isLight ? "light" : "dark"} ${
+                                canPlaceHere ? "allowed-zone" : ""
+                              } ${blackPartner ? "black-partner-zone" : ""} ${squareBlocked ? "blocked" : ""}`}
+                              onClick={() => {
+                                if (!canPlaceHere) return;
+                                let nextPalette = null;
+                                setWhiteLayout((current) => {
+                                  const next = cloneLayout(current);
+                                  const existing = next[rowIndex][colIndex];
+                                  if (existing) {
+                                    if (existing === placementPiece) {
+                                      next[rowIndex][colIndex] = null;
+                                      return next;
+                                    }
+                                    const trial = cloneLayout(current);
+                                    trial[rowIndex][colIndex] = placementPiece;
+                                    if (!layoutWithinLimits(trial, frequencies)) return current;
+                                    next[rowIndex][colIndex] = placementPiece;
+                                    nextPalette = existing;
+                                    return next;
+                                  }
+                                  const limit = placementPiece === "king" ? 1 : frequencies[placementPiece];
+                                  const placed = whitePlacedCounts[placementPiece];
+                                  if (placed >= limit) return current;
+                                  next[rowIndex][colIndex] = placementPiece;
+                                  return next;
+                                });
+                                if (nextPalette !== null) setPlacementPiece(nextPalette);
+                              }}
+                              draggable={Boolean(piece)}
+                              onDragStart={(event) => {
+                                if (!piece) return;
+                                event.dataTransfer.setData(
+                                  "application/white-piece",
+                                  JSON.stringify({ type: piece, from: [rowIndex, colIndex] })
+                                );
+                              }}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={(event) => {
+                                const raw = event.dataTransfer.getData("application/white-piece");
+                                if (!raw) return;
+                                if (!canPlaceHere) return;
+                                const payload = JSON.parse(raw);
+                                let nextPalette = null;
+                                setWhiteLayout((current) => {
+                                  const next = cloneLayout(current);
+                                  if (payload.from) {
+                                    const [fr, fc] = payload.from;
+                                    const moving = next[fr]?.[fc];
+                                    if (!moving) return current;
+                                    const atTarget = next[rowIndex][colIndex];
+                                    if (atTarget) {
+                                      const fromAllowed = whitePlacementAllowed(fr, fc, rows, cols);
+                                      if (!fromAllowed || !canPlaceHere) return current;
+                                      const trial = cloneLayout(current);
+                                      trial[fr][fc] = atTarget;
+                                      trial[rowIndex][colIndex] = moving;
+                                      if (!layoutWithinLimits(trial, frequencies)) return current;
+                                      next[fr][fc] = atTarget;
+                                      next[rowIndex][colIndex] = moving;
+                                      return next;
+                                    }
+                                    if (!canPlaceHere) return current;
+                                    next[fr][fc] = null;
+                                    next[rowIndex][colIndex] = moving;
+                                    return next;
+                                  }
+                                  const type = payload.type;
+                                  const atTarget = next[rowIndex][colIndex];
+                                  if (atTarget) {
+                                    if (atTarget === type) return current;
+                                    const trial = cloneLayout(current);
+                                    trial[rowIndex][colIndex] = type;
+                                    if (!layoutWithinLimits(trial, frequencies)) return current;
+                                    next[rowIndex][colIndex] = type;
+                                    nextPalette = atTarget;
+                                    return next;
+                                  }
+                                  const limit = type === "king" ? 1 : frequencies[type];
+                                  const placed = whitePlacedCounts[type];
+                                  if (placed >= limit) return current;
+                                  next[rowIndex][colIndex] = type;
+                                  return next;
+                                });
+                                if (nextPalette !== null) setPlacementPiece(nextPalette);
+                              }}
+                            >
+                              <span className="placement-cell-stack">
+                                {piece ? <span className="placement-white-glyph">{WHITE_UNICODE[piece]}</span> : null}
+                                {ghostBlackPiece ? (
+                                  <span className="placement-ghost-black" aria-hidden>
+                                    {BLACK_UNICODE[ghostBlackPiece]}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div
+                      className="remove-zone"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
                         const raw = event.dataTransfer.getData("application/white-piece");
                         if (!raw) return;
-                        if (!canPlaceHere) return;
                         const payload = JSON.parse(raw);
-                        let nextPalette = null;
+                        if (!payload.from) return;
+                        const [fr, fc] = payload.from;
                         setWhiteLayout((current) => {
                           const next = cloneLayout(current);
-                          if (payload.from) {
-                            const [fr, fc] = payload.from;
-                            const moving = next[fr]?.[fc];
-                            if (!moving) return current;
-                            const atTarget = next[rowIndex][colIndex];
-                            if (atTarget) {
-                              const fromAllowed = whitePlacementAllowed(fr, fc, rows, cols);
-                              if (!fromAllowed || !canPlaceHere) return current;
-                              const trial = cloneLayout(current);
-                              trial[fr][fc] = atTarget;
-                              trial[rowIndex][colIndex] = moving;
-                              if (!layoutWithinLimits(trial, frequencies)) return current;
-                              next[fr][fc] = atTarget;
-                              next[rowIndex][colIndex] = moving;
-                              return next;
-                            }
-                            if (!canPlaceHere) return current;
-                            next[fr][fc] = null;
-                            next[rowIndex][colIndex] = moving;
-                            return next;
-                          }
-                          const type = payload.type;
-                          const atTarget = next[rowIndex][colIndex];
-                          if (atTarget) {
-                            if (atTarget === type) return current;
-                            const trial = cloneLayout(current);
-                            trial[rowIndex][colIndex] = type;
-                            if (!layoutWithinLimits(trial, frequencies)) return current;
-                            next[rowIndex][colIndex] = type;
-                            nextPalette = atTarget;
-                            return next;
-                          }
-                          const limit = type === "king" ? 1 : frequencies[type];
-                          const placed = whitePlacedCounts[type];
-                          if (placed >= limit) return current;
-                          next[rowIndex][colIndex] = type;
+                          if (!next[fr]?.[fc]) return current;
+                          next[fr][fc] = null;
                           return next;
                         });
-                        if (nextPalette !== null) setPlacementPiece(nextPalette);
                       }}
                     >
-                      <span className="placement-cell-stack">
-                        {piece ? <span className="placement-white-glyph">{WHITE_UNICODE[piece]}</span> : null}
-                        {ghostBlackPiece ? (
-                          <span className="placement-ghost-black" aria-hidden>
-                            {BLACK_UNICODE[ghostBlackPiece]}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <div
-              className="remove-zone"
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                const raw = event.dataTransfer.getData("application/white-piece");
-                if (!raw) return;
-                const payload = JSON.parse(raw);
-                if (!payload.from) return;
-                const [fr, fc] = payload.from;
-                setWhiteLayout((current) => {
-                  const next = cloneLayout(current);
-                  if (!next[fr]?.[fc]) return current;
-                  next[fr][fc] = null;
-                  return next;
-                });
-              }}
-            >
-              Drag a placed white piece here to remove
-            </div>
+                      Drag a placed white piece here to remove
+                    </div>
                   </>
                 )}
               </div>
@@ -1473,3 +1473,4 @@ export default function App() {
     </div>
   );
 }
+

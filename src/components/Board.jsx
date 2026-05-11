@@ -12,8 +12,8 @@ import {
 import { generateLegalMoves } from "../game/moveGenerator";
 import { shouldOfferPawnPromotion } from "../game/pawnPlacement";
 import { PROMOTION_CHOICES } from "../game/pieces";
-import Piece from "./Piece";
-import Square from "./Square";
+import Piece from "./Piece.jsx";
+import Square from "./Square.jsx";
 import "./Board.css";
 
 const PIECE_UNICODE = {
@@ -430,3 +430,4 @@ export default function Board({ setup, onBackToCustomization, onBackToModeSelect
     </div>
   );
 }
+
