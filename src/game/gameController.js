@@ -207,6 +207,17 @@ export const tickClock = (state, now = Date.now()) => {
   return { ...state, timers, whiteDelayRemaining, lastTickAt: now };
 };
 
+/** Call after the UI pre-game countdown so White's clock runs immediately (skips engine white start delay). */
+export const syncClockAfterPreGameCountdown = (state) => {
+  const now = Date.now();
+  return {
+    ...state,
+    lastTickAt: now,
+    turnStartedAt: now,
+    whiteDelayRemaining: 0
+  };
+};
+
 export const resign = (state, color) => {
   if (state.status === "checkmate" || state.status === "draw" || state.status === "resigned") return state;
   return {

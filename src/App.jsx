@@ -1,4 +1,8 @@
-import Board from "./components/Board.jsx";
+import { BoardAdvanced, BoardDefault, BoardMedium } from "./components/Board.jsx";
+import GlobalTopNav from "./components/GlobalTopNav.jsx";
+import ModeInstructionsModal from "./components/ModeInstructionsModal.jsx";
+import Piece from "./components/Piece.jsx";
+import "./components/Board.css";
 import { useEffect, useMemo, useState } from "react";
 import {
   ADVANCED_PLACEMENT_REGIONS,
@@ -26,24 +30,6 @@ const PIECE_LABELS = {
   king: "King"
 };
 
-const WHITE_UNICODE = {
-  king: "♔",
-  queen: "♕",
-  rook: "♖",
-  bishop: "♗",
-  knight: "♘",
-  pawn: "♙"
-};
-
-const BLACK_UNICODE = {
-  king: "♚",
-  queen: "♛",
-  rook: "♜",
-  bishop: "♝",
-  knight: "♞",
-  pawn: "♟"
-};
-
 const MOVEMENT_PIECES = ["king", "queen", "rook", "bishop", "knight", "pawn"];
 
 const JUMP_OPTIONS = ["2*1", "3*1", "1*3", "3*2", "2*3", "4*1", "1*4", "3*3"];
@@ -61,6 +47,12 @@ const INITIAL_FREQUENCIES = {
   knight: 2,
   queen: 1
 };
+
+/** Shared placement editor cell size (medium + advanced setup). */
+const SETUP_PLACEMENT_CELL_PX = 54;
+
+const clampBoardDimension = (n) => Math.min(9, Math.max(4, Number(n) || 4));
+const clampPieceFrequency = (n) => Math.min(12, Math.max(0, Number(n) || 0));
 
 const cloneLayout = (layout) => layout.map((row) => [...row]);
 
@@ -272,7 +264,8 @@ const enrichStartingEntries = (entries, opts) => {
 };
 
 export default function App() {
-  const [mode, setMode] = useState(null);
+  const [mode, setMode] = useState("default");
+  const [sessionStartNonce, setSessionStartNonce] = useState(0);
   const [rows, setRows] = useState(8);
   const [cols, setCols] = useState(8);
   const [frequencies, setFrequencies] = useState(INITIAL_FREQUENCIES);
@@ -289,7 +282,9 @@ export default function App() {
   const [asymPlacementColor, setAsymPlacementColor] = useState("white");
   const [advancedPlacementRegion, setAdvancedPlacementRegion] = useState("upper_half");
   const [startError, setStartError] = useState(null);
-  const [activeSetup, setActiveSetup] = useState(null);
+  const [activeSetup, setActiveSetup] = useState(DEFAULT_SETUP);
+  const [setupInstructionsOpen, setSetupInstructionsOpen] = useState(false);
+  const [setupWorkspaceOpen, setSetupWorkspaceOpen] = useState(false);
   const [skipMovementCustomization, setSkipMovementCustomization] = useState(false);
   const [movementDrafts, setMovementDrafts] = useState(() =>
     MOVEMENT_PIECES.reduce((acc, piece) => ({ ...acc, [piece]: createEmptyMovementDraft() }), {})
@@ -541,6 +536,28 @@ export default function App() {
     skipMovementCustomization ||
     piecesInPlayForMovement.every((piece) => pieceMovementComplete(piece));
 
+  const setupPlacementCellPx =
+    mode === "medium" || mode === "advanced" ? SETUP_PLACEMENT_CELL_PX : 42;
+
+  const tryStartGame = () => {
+    if (whitePlacedCounts.king !== 1) {
+      setStartError("Place exactly one white king on the board before starting.");
+      return;
+    }
+    if (mode === "advanced" && useCombinedPlacementBoard && blackPlacedCounts.king !== 1) {
+      setStartError("Place exactly one black king on the board before starting.");
+      return;
+    }
+    const reason = getStartPositionBlockReason(draftSetup.customRules);
+    if (reason) {
+      setStartError(reason);
+      return;
+    }
+    setStartError(null);
+    setSessionStartNonce((n) => n + 1);
+    setActiveSetup(draftSetup);
+  };
+
   const handleModeSelect = (nextMode) => {
     setMode(nextMode);
     setSkipMovementCustomization(false);
@@ -555,86 +572,156 @@ export default function App() {
     setStartError(null);
     if (nextMode === "default") {
       setActiveSetup(DEFAULT_SETUP);
+      setSetupInstructionsOpen(false);
+      setSetupWorkspaceOpen(false);
       return;
     }
     setActiveSetup(null);
+    setSetupInstructionsOpen(true);
+    setSetupWorkspaceOpen(false);
   };
 
-  if (!mode) {
-    return (
-      <main className="mode-screen">
-        <h1>Chems</h1>
-        <p>Choose game mode</p>
-
-        <div className="mode-grid">
-          <button onClick={() => handleModeSelect("default")}>
-            Default game
-          </button>
-
-          <button onClick={() => handleModeSelect("medium")}>
-            Medium custom
-          </button>
-
-          <button onClick={() => handleModeSelect("advanced")}>
-            Advanced custom
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <div>
+    <div className="app-root app-root--arena">
+      <ModeInstructionsModal
+        open={setupInstructionsOpen}
+        instructionMode={mode === "medium" || mode === "advanced" ? mode : "default"}
+        guideByPiece={mode === "medium" || mode === "advanced" ? movementGuide ?? {} : {}}
+        onClose={() => setSetupInstructionsOpen(false)}
+      />
       {isSetupPhase ? (
-        <section className="custom-controls">
-          <h3>
-            {mode === "medium"
-              ? "Medium custom setup"
-              : advancedUnfair
-                ? "Advanced custom setup (unequal armies)"
-                : advancedFairUnsym
-                  ? "Advanced custom setup (fair unsymmetry)"
-                  : "Advanced custom setup"}
-          </h3>
+        <GlobalTopNav modeId={mode} onModeChange={handleModeSelect} titleTag="h1">
+          <button type="button" className="btn-secondary" onClick={() => setSetupInstructionsOpen(true)}>
+            Instructions
+          </button>
+        </GlobalTopNav>
+      ) : null}
+      {isSetupPhase && !setupWorkspaceOpen ? (
+        <div className={`setup-mode-hero setup-mode-hero--${mode}`}>
+          <div className="setup-mode-hero__glow" aria-hidden />
+          <div className="setup-mode-hero__inner">
+            <p className="setup-mode-hero__eyebrow">{mode === "medium" ? "Custom layout" : "Full control"}</p>
+            <h2 className="setup-mode-hero__title">
+              {mode === "medium" ? "Medium mode" : "Advanced mode"}
+            </h2>
+            <p className="setup-mode-hero__lede">
+              {mode === "medium"
+                ? "Pick board size, piece counts, and place white on the upper half — black mirrors below. Perfect for fair variants without rewriting movement rules."
+                : "Shape armies, placement zones, optional unequal forces, custom movement per piece, and safe squares — then play on your own ruleset."}
+            </p>
+            <ul className="setup-mode-hero__bullets">
+              {mode === "medium" ? (
+                <>
+                  <li>Resize the grid and tune how many of each piece type you want.</li>
+                  <li>Drag pieces onto the board; symmetry preview shows black&apos;s home.</li>
+                  <li>When you&apos;re ready, start the game and play with the same clock and UI as Default.</li>
+                </>
+              ) : (
+                <>
+                  <li>Choose fair symmetry, fair unsymmetry, or fully unequal armies.</li>
+                  <li>Optional movement lab: sliders, jumps, or copy a standard piece&apos;s motion.</li>
+                  <li>Mark safe squares and outer rings when you want extra tactical zones.</li>
+                </>
+              )}
+            </ul>
+            <div className="setup-mode-hero__actions">
+              <button type="button" className="setup-mode-hero__cta" onClick={() => setSetupWorkspaceOpen(true)}>
+                Begin board setup
+              </button>
+              <button type="button" className="setup-mode-hero__ghost" onClick={() => setSetupInstructionsOpen(true)}>
+                Read instructions first
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {isSetupPhase && setupWorkspaceOpen ? (
+        <section className={`custom-controls custom-controls--arena setup-workspace setup-workspace--${mode}`}>
+          <div className="setup-workspace-toolbar">
+            <button type="button" className="setup-back-to-hero" onClick={() => setSetupWorkspaceOpen(false)}>
+              ← Back to mode overview
+            </button>
+          </div>
+          {mode === "medium" || mode === "advanced" ? (
+            <>
+              <div className="setup-workspace-heading-row">
+                <h3 className="setup-workspace-heading setup-workspace-heading--with-action">
+                  {mode === "medium"
+                    ? "Medium custom setup"
+                    : advancedUnfair
+                      ? "Advanced setup — unequal armies"
+                      : advancedFairUnsym
+                        ? "Advanced setup — fair unsymmetry"
+                        : "Advanced custom setup"}
+                </h3>
+                <button
+                  type="button"
+                  className="btn-setup-start-game"
+                  onClick={tryStartGame}
+                  disabled={mode === "advanced" && !canStartGame}
+                >
+                  Start game
+                </button>
+              </div>
+              {mode === "advanced" && !canStartGame ? (
+                <p className="setup-hint setup-hint--advanced-block">
+                  For each piece in play, pick standard movement or at least one custom option — or check &quot;I dont want
+                  to customize movement&quot; in the movement section below.
+                </p>
+              ) : null}
+              {startError ? <p className="setup-hint setup-error setup-error--below-heading">{startError}</p> : null}
+            </>
+          ) : null}
           {mode === "advanced" ? (
-            <div className="control-row">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={advancedFairUnsym}
-                  onChange={(event) => {
-                    const next = event.target.checked;
-                    setAdvancedFairUnsym(next);
-                    if (next) {
-                      setAdvancedUnfair(false);
-                      setCombinedLayout(createEmptyCombinedLayout(rows, cols));
-                    }
+            <div className="setup-card setup-card--advanced-army-modes">
+              <p className="setup-card__eyebrow">Army layout</p>
+              <div className="advanced-army-mode-grid" role="group" aria-label="Army placement mode">
+                <button
+                  type="button"
+                  className={`advanced-army-mode-card ${!advancedFairUnsym && !advancedUnfair ? "is-active" : ""}`}
+                  onClick={() => {
+                    setAdvancedFairUnsym(false);
+                    setAdvancedUnfair(false);
+                    setCombinedLayout(createEmptyCombinedLayout(rows, cols));
                   }}
-                />
-                Fair unsymmetry — equal piece counts, white and black placed independently (not mirrored)
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={advancedUnfair}
-                  onChange={(event) => {
-                    const next = event.target.checked;
-                    setAdvancedUnfair(next);
-                    if (next) {
-                      setAdvancedFairUnsym(false);
-                      setCombinedLayout(createEmptyCombinedLayout(rows, cols));
-                    }
+                >
+                  <span className="advanced-army-mode-card__title">Mirrored</span>
+                  <span className="advanced-army-mode-card__hint">Place white; black mirrors below (fair).</span>
+                </button>
+                <button
+                  type="button"
+                  className={`advanced-army-mode-card ${advancedFairUnsym ? "is-active" : ""}`}
+                  onClick={() => {
+                    setAdvancedFairUnsym(true);
+                    setAdvancedUnfair(false);
+                    setCombinedLayout(createEmptyCombinedLayout(rows, cols));
                   }}
-                />
-                Asymmetric setup — unequal armies; place white and black separately (no auto symmetry)
-              </label>
+                >
+                  <span className="advanced-army-mode-card__title">Fair unsymmetry</span>
+                  <span className="advanced-army-mode-card__hint">Same piece counts; place both sides freely.</span>
+                </button>
+                <button
+                  type="button"
+                  className={`advanced-army-mode-card ${advancedUnfair ? "is-active" : ""}`}
+                  onClick={() => {
+                    setAdvancedUnfair(true);
+                    setAdvancedFairUnsym(false);
+                    setCombinedLayout(createEmptyCombinedLayout(rows, cols));
+                  }}
+                >
+                  <span className="advanced-army-mode-card__title">Unequal armies</span>
+                  <span className="advanced-army-mode-card__hint">Independent counts and separate placement.</span>
+                </button>
+              </div>
             </div>
           ) : null}
           {mode === "advanced" && advancedUnfair && pawnUsesPlacementSoldierRules(movementDrafts.pawn) ? (
+            <div className="setup-card setup-card--soldier-dir">
             <div className="control-row">
               <label>
                 Default soldier forward direction (unequal armies only)
                 <select
+                  className="arena-select movement-select--arena"
                   value={unequalSoldierDirectionId}
                   onChange={(event) => setUnequalSoldierDirectionId(event.target.value)}
                 >
@@ -649,81 +736,173 @@ export default function App() {
                 Used only when soldier movement is default. Ignored if you customize the soldier.
               </p>
             </div>
+            </div>
           ) : null}
-          <div className="control-row">
-            <label>
-              Rows
-              <input
-                type="number"
-                min="4"
-                max="9"
-                value={rows}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setRows(next);
-                  resizeLayout(next, cols);
-                }}
-              />
-            </label>
-            <label>
-              Columns
-              <input
-                type="number"
-                min="4"
-                max="9"
-                value={cols}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setCols(next);
-                  resizeLayout(rows, next);
-                }}
-              />
-            </label>
-          </div>
-
-          <div className="control-row">
-            {MEDIUM_PIECES.map((piece) => (
-              <label key={piece}>
-                {PIECE_LABELS[piece]} frequency
-                <input
-                  type="number"
-                  min="0"
-                  max="12"
-                  value={frequencies[piece]}
-                  onChange={(event) =>
-                    setFrequencies((current) => ({
-                      ...current,
-                      [piece]: Number(event.target.value)
-                    }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-
-          {mode === "advanced" && advancedUnfair && !advancedFairUnsym ? (
-            <div className="control-row black-frequencies-row">
-              {MEDIUM_PIECES.map((piece) => (
-                <label key={`b-${piece}`}>
-                  Black {PIECE_LABELS[piece]} frequency
-                  <input
-                    type="number"
-                    min="0"
-                    max="12"
-                    value={blackFrequencies[piece]}
-                    onChange={(event) =>
-                      setBlackFrequencies((current) => ({
-                        ...current,
-                        [piece]: Number(event.target.value)
-                      }))
-                    }
-                  />
-                </label>
-              ))}
+          {mode === "medium" || mode === "advanced" ? (
+            <div
+              className={`setup-card setup-card--dimensions-inline setup-card--dimensions-inline--${mode === "advanced" ? "advanced" : "medium"}`}
+            >
+              <div className="setup-dimensions-row">
+                <div className="setup-partition setup-partition--board">
+                  <span className="setup-partition__title">Board size</span>
+                  <div className="setup-stepper-group">
+                    <span className="setup-stepper-label">Rows</span>
+                    <div className="setup-stepper">
+                      <button
+                        type="button"
+                        className="setup-stepper__btn"
+                        aria-label="Decrease rows"
+                        disabled={rows <= 4}
+                        onClick={() => {
+                          const next = clampBoardDimension(rows - 1);
+                          setRows(next);
+                          resizeLayout(next, cols);
+                        }}
+                      >
+                        −
+                      </button>
+                      <span className="setup-stepper__value">{rows}</span>
+                      <button
+                        type="button"
+                        className="setup-stepper__btn"
+                        aria-label="Increase rows"
+                        disabled={rows >= 9}
+                        onClick={() => {
+                          const next = clampBoardDimension(rows + 1);
+                          setRows(next);
+                          resizeLayout(next, cols);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="setup-stepper-group">
+                    <span className="setup-stepper-label">Columns</span>
+                    <div className="setup-stepper">
+                      <button
+                        type="button"
+                        className="setup-stepper__btn"
+                        aria-label="Decrease columns"
+                        disabled={cols <= 4}
+                        onClick={() => {
+                          const next = clampBoardDimension(cols - 1);
+                          setCols(next);
+                          resizeLayout(rows, next);
+                        }}
+                      >
+                        −
+                      </button>
+                      <span className="setup-stepper__value">{cols}</span>
+                      <button
+                        type="button"
+                        className="setup-stepper__btn"
+                        aria-label="Increase columns"
+                        disabled={cols >= 9}
+                        onClick={() => {
+                          const next = clampBoardDimension(cols + 1);
+                          setCols(next);
+                          resizeLayout(rows, next);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="setup-partition setup-partition--pieces">
+                  <span className="setup-partition__title">
+                    {mode === "advanced" && advancedUnfair && !advancedFairUnsym
+                      ? "White army frequencies"
+                      : "Piece frequencies"}
+                  </span>
+                  <div className="setup-piece-frequencies">
+                    {MEDIUM_PIECES.map((piece) => (
+                      <div className="setup-stepper-group setup-stepper-group--piece" key={piece}>
+                        <span className="setup-stepper-label">{PIECE_LABELS[piece]}</span>
+                        <div className="setup-stepper">
+                          <button
+                            type="button"
+                            className="setup-stepper__btn"
+                            aria-label={`Decrease ${PIECE_LABELS[piece]} count`}
+                            disabled={frequencies[piece] <= 0}
+                            onClick={() =>
+                              setFrequencies((current) => ({
+                                ...current,
+                                [piece]: clampPieceFrequency((current[piece] ?? 0) - 1)
+                              }))
+                            }
+                          >
+                            −
+                          </button>
+                          <span className="setup-stepper__value">{frequencies[piece]}</span>
+                          <button
+                            type="button"
+                            className="setup-stepper__btn"
+                            aria-label={`Increase ${PIECE_LABELS[piece]} count`}
+                            disabled={frequencies[piece] >= 12}
+                            onClick={() =>
+                              setFrequencies((current) => ({
+                                ...current,
+                                [piece]: clampPieceFrequency((current[piece] ?? 0) + 1)
+                              }))
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {mode === "advanced" && advancedUnfair && !advancedFairUnsym ? (
+                <div className="setup-black-frequencies">
+                  <span className="setup-partition__title">Black army frequencies</span>
+                  <div className="setup-piece-frequencies">
+                    {MEDIUM_PIECES.map((piece) => (
+                      <div className="setup-stepper-group setup-stepper-group--piece" key={`b-${piece}`}>
+                        <span className="setup-stepper-label">{PIECE_LABELS[piece]}</span>
+                        <div className="setup-stepper">
+                          <button
+                            type="button"
+                            className="setup-stepper__btn"
+                            aria-label={`Decrease black ${PIECE_LABELS[piece]} count`}
+                            disabled={blackFrequencies[piece] <= 0}
+                            onClick={() =>
+                              setBlackFrequencies((current) => ({
+                                ...current,
+                                [piece]: clampPieceFrequency((current[piece] ?? 0) - 1)
+                              }))
+                            }
+                          >
+                            −
+                          </button>
+                          <span className="setup-stepper__value">{blackFrequencies[piece]}</span>
+                          <button
+                            type="button"
+                            className="setup-stepper__btn"
+                            aria-label={`Increase black ${PIECE_LABELS[piece]} count`}
+                            disabled={blackFrequencies[piece] >= 12}
+                            onClick={() =>
+                              setBlackFrequencies((current) => ({
+                                ...current,
+                                [piece]: clampPieceFrequency((current[piece] ?? 0) + 1)
+                              }))
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
-          <div className="placement-tools">
+          <div className="placement-tools setup-card setup-card--placement">
             <div className="placement-boards-row">
               <div className="placement-column">
                 {useCombinedPlacementBoard ? (
@@ -764,7 +943,12 @@ export default function App() {
                                   )
                                 }
                               >
-                                {WHITE_UNICODE[piece]} {PIECE_LABELS[piece]} ({remaining})
+                                <span className="palette-piece-visual" aria-hidden>
+                                  <Piece piece={{ color: "white", type: piece }} from={[0, 0]} draggable={false} />
+                                </span>
+                                <span className="palette-piece-caption">
+                                  {PIECE_LABELS[piece]} <span className="palette-piece-count">({remaining})</span>
+                                </span>
                               </button>
                             );
                           })}
@@ -800,7 +984,12 @@ export default function App() {
                                   )
                                 }
                               >
-                                {BLACK_UNICODE[piece]} {PIECE_LABELS[piece]} ({remaining})
+                                <span className="palette-piece-visual" aria-hidden>
+                                  <Piece piece={{ color: "black", type: piece }} from={[0, 0]} draggable={false} />
+                                </span>
+                                <span className="palette-piece-caption">
+                                  {PIECE_LABELS[piece]} <span className="palette-piece-count">({remaining})</span>
+                                </span>
                               </button>
                             );
                           })}
@@ -810,21 +999,18 @@ export default function App() {
                     <button type="button" onClick={() => setCombinedLayout(createEmptyCombinedLayout(rows, cols))}>
                       Clear entire board
                     </button>
+                    <div className="placement-board-scroll">
                     <div
                       className="placement-board"
                       style={{
-                        gridTemplateColumns: `repeat(${cols}, 42px)`,
-                        width: `calc(${cols} * 42px)`
+                        gridTemplateColumns: `repeat(${cols}, ${setupPlacementCellPx}px)`,
+                        gridAutoRows: `${setupPlacementCellPx}px`,
+                        width: `calc(${cols} * ${setupPlacementCellPx}px)`
                       }}
                     >
                       {combinedLayout.map((row, rowIndex) =>
                         row.map((cell, colIndex) => {
                           const isLight = (rowIndex + colIndex) % 2 === 0;
-                          const sym = cell
-                            ? cell.color === "white"
-                              ? WHITE_UNICODE[cell.type]
-                              : BLACK_UNICODE[cell.type]
-                            : "";
                           return (
                             <button
                               key={`c-${rowIndex}-${colIndex}`}
@@ -936,11 +1122,18 @@ export default function App() {
                                 }
                               }}
                             >
-                              {sym}
+                              {cell ? (
+                                <Piece
+                                  piece={{ color: cell.color, type: cell.type }}
+                                  from={[rowIndex, colIndex]}
+                                  draggable={false}
+                                />
+                              ) : null}
                             </button>
                           );
                         })
                       )}
+                    </div>
                     </div>
                     <div
                       className="remove-zone"
@@ -974,6 +1167,7 @@ export default function App() {
                         <label className="placement-region-label">
                           Allowed placement area
                           <select
+                            className="arena-select movement-select--arena"
                             value={advancedPlacementRegion}
                             onChange={(event) => setAdvancedPlacementRegion(event.target.value)}
                           >
@@ -1012,7 +1206,12 @@ export default function App() {
                               event.dataTransfer.setData("application/white-piece", JSON.stringify({ type: piece }))
                             }
                           >
-                            {WHITE_UNICODE[piece]} {PIECE_LABELS[piece]} ({remaining})
+                            <span className="palette-piece-visual" aria-hidden>
+                              <Piece piece={{ color: "white", type: piece }} from={[0, 0]} draggable={false} />
+                            </span>
+                            <span className="palette-piece-caption">
+                              {PIECE_LABELS[piece]} <span className="palette-piece-count">({remaining})</span>
+                            </span>
                           </button>
                         );
                       })}
@@ -1021,11 +1220,13 @@ export default function App() {
                       </button>
                     </div>
 
+                    <div className="placement-board-scroll">
                     <div
                       className="placement-board"
                       style={{
-                        gridTemplateColumns: `repeat(${cols}, 42px)`,
-                        width: `calc(${cols} * 42px)`
+                        gridTemplateColumns: `repeat(${cols}, ${setupPlacementCellPx}px)`,
+                        gridAutoRows: `${setupPlacementCellPx}px`,
+                        width: `calc(${cols} * ${setupPlacementCellPx}px)`
                       }}
                     >
                       {whiteLayout.map((row, rowIndex) =>
@@ -1140,10 +1341,22 @@ export default function App() {
                               }}
                             >
                               <span className="placement-cell-stack">
-                                {piece ? <span className="placement-white-glyph">{WHITE_UNICODE[piece]}</span> : null}
+                                {piece ? (
+                                  <span className="placement-piece-layer">
+                                    <Piece
+                                      piece={{ color: "white", type: piece }}
+                                      from={[rowIndex, colIndex]}
+                                      draggable={false}
+                                    />
+                                  </span>
+                                ) : null}
                                 {ghostBlackPiece ? (
-                                  <span className="placement-ghost-black" aria-hidden>
-                                    {BLACK_UNICODE[ghostBlackPiece]}
+                                  <span className="placement-ghost-layer" aria-hidden>
+                                    <Piece
+                                      piece={{ color: "black", type: ghostBlackPiece }}
+                                      from={[0, 0]}
+                                      draggable={false}
+                                    />
                                   </span>
                                 ) : null}
                               </span>
@@ -1151,6 +1364,7 @@ export default function App() {
                           );
                         })
                       )}
+                    </div>
                     </div>
                     <div
                       className="remove-zone"
@@ -1178,182 +1392,251 @@ export default function App() {
           </div>
 
           {mode === "advanced" ? (
-            <>
-              <div className="control-row">
-                <label>
+            <div className="setup-advanced-blocks setup-movement-lab">
+              <header className="movement-lab-intro">
+                <div className="movement-lab-intro__badge" aria-hidden>
+                  <span className="movement-lab-intro__orbit" />
+                  <span className="movement-lab-intro__core">♟</span>
+                </div>
+                <div className="movement-lab-intro__text">
+                  <h4 className="movement-lab-intro__title">Movement laboratory</h4>
+                  <p className="movement-lab-intro__lede">
+                    Shape slides, diagonals, and knight-style jumps per piece — or borrow another piece&apos;s motion.
+                    Experiment freely; the engine validates everything at start.
+                  </p>
+                </div>
+              </header>
+
+              <div className="setup-card setup-card--movement-skip movement-lab-skip">
+                <label className="movement-lab-skip__label">
                   <input
                     type="checkbox"
                     checked={skipMovementCustomization}
                     onChange={(event) => setSkipMovementCustomization(event.target.checked)}
+                    className="movement-lab-skip__input"
                   />
-                  I dont want to customize movement
+                  <span className="movement-lab-skip__switch" aria-hidden />
+                  <span className="movement-lab-skip__copy">
+                    <strong>Use classic chess movement only</strong>
+                    <span className="movement-lab-skip__hint">Skips all panels below — fastest path to play.</span>
+                  </span>
                 </label>
               </div>
 
               {!skipMovementCustomization ? (
-                <div className="control-row movement-row">
-                  {piecesInPlayForMovement.map((piece) => {
-                    const d = movementDrafts[piece];
-                    const customLocked = d.useDefault || Boolean(d.moveAsPiece);
-                    return (
-                      <div
-                        className={`movement-card ${piece === "king" ? "movement-card-king" : ""}`}
-                        key={`movement-${piece}`}
-                      >
-                        <strong>{PIECE_LABELS[piece]} movement</strong>
-                        {piece === "king" ? (
-                          <p className="field-hint king-movement-hint">
-                            Customizing the king is not recommended due to complications in ending the game (check,
-                            checkmate, and king safety).
-                          </p>
-                        ) : null}
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={d.useDefault && !d.moveAsPiece}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              updateMovementDraft(piece, (current) =>
-                                checked
-                                  ? {
-                                      useDefault: true,
-                                      moveAsPiece: null,
-                                      straight: false,
-                                      cross: false,
-                                      jumpSelections: [],
-                                      soldierKillStraight: false
-                                    }
-                                  : { ...current, useDefault: false }
-                              );
-                            }}
-                          />
-                          Move as default (standard chess)
-                        </label>
-                        <label className="full-width copy-movement-label">
-                          Copy movement from
-                          <select
-                            className="copy-movement-select"
-                            value=""
-                            onChange={(event) => {
-                              const src = event.target.value;
-                              event.target.value = "";
-                              if (!src || src === piece) return;
-                              setMovementDrafts((all) => ({
-                                ...all,
-                                [piece]: {
-                                  useDefault: false,
-                                  moveAsPiece: src,
-                                  straight: false,
-                                  cross: false,
-                                  jumpSelections: [],
-                                  soldierKillStraight: false
-                                }
-                              }));
-                            }}
-                          >
-                            <option value="">Choose piece…</option>
-                            {piecesInPlayForMovement
-                              .filter((p) => p !== piece && p !== "pawn")
-                              .map((p) => (
-                                <option key={p} value={p}>
-                                  {PIECE_LABELS[p]}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        {d.moveAsPiece ? (
-                          <p className="field-hint">
-                            This piece uses the same movement vectors as a standard {PIECE_LABELS[d.moveAsPiece]} in
-                            chess (not this piece&apos;s default).
-                          </p>
-                        ) : null}
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={d.straight}
-                            disabled={customLocked}
-                            onChange={(event) =>
-                              updateMovementDraft(piece, (current) => ({
-                                ...current,
-                                useDefault: false,
-                                moveAsPiece: null,
-                                straight: event.target.checked
-                              }))
-                            }
-                          />
-                          Straight (orthogonal slide)
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={d.cross}
-                            disabled={customLocked}
-                            onChange={(event) =>
-                              updateMovementDraft(piece, (current) => ({
-                                ...current,
-                                useDefault: false,
-                                moveAsPiece: null,
-                                cross: event.target.checked
-                              }))
-                            }
-                          />
-                          Cross (diagonal slide)
-                        </label>
-                        <div className="full-width jump-patterns-block">
-                          <span className="jump-patterns-label">Jump patterns (m×n) — click to toggle</span>
-                          <div className="jump-chip-row">
-                            {JUMP_OPTIONS.map((opt) => {
-                              const on = (d.jumpSelections ?? []).includes(opt);
-                              return (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  className={`jump-pattern-chip ${on ? "jump-pattern-chip--on" : ""}`}
-                                  disabled={customLocked}
-                                  onClick={() =>
-                                    updateMovementDraft(piece, (current) => {
-                                      const cur = current.jumpSelections ?? [];
-                                      const nextSel = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt];
-                                      return {
+                <div className="setup-card setup-card--movement-grid movement-lab-deck">
+                  <p className="movement-lab-deck__kicker">Per-piece profiles</p>
+                  <div className="movement-lab-deck__grid">
+                    {piecesInPlayForMovement.map((piece) => {
+                      const d = movementDrafts[piece];
+                      const customLocked = d.useDefault || Boolean(d.moveAsPiece);
+                      return (
+                        <div
+                          className={`movement-lab-card movement-lab-card--${piece} ${
+                            piece === "king" ? "movement-lab-card--king-risk" : ""
+                          }`}
+                          key={`movement-${piece}`}
+                        >
+                          <div className="movement-lab-card__shine" aria-hidden />
+                          <div className="movement-lab-card__hero">
+                            <div className="movement-lab-card__coin">
+                              <Piece piece={{ color: "white", type: piece }} from={[0, 0]} draggable={false} />
+                            </div>
+                            <div className="movement-lab-card__heading">
+                              <h4 className="movement-lab-card__name">{PIECE_LABELS[piece]}</h4>
+                              <span className="movement-lab-card__tag">Customize vectors</span>
+                            </div>
+                          </div>
+                          {piece === "king" ? (
+                            <p className="movement-lab-card__alert">
+                              Custom kings can break check / mate detection — use only if you understand the trade-offs.
+                            </p>
+                          ) : null}
+
+                          <div className="movement-lab-card__stack">
+                            <div className="movement-lab-field">
+                              <span className="movement-lab-field__label">Foundation</span>
+                              <label className="movement-pill">
+                                <input
+                                  type="checkbox"
+                                  checked={d.useDefault && !d.moveAsPiece}
+                                  className="movement-pill__input"
+                                  onChange={(event) => {
+                                    const checked = event.target.checked;
+                                    updateMovementDraft(piece, (current) =>
+                                      checked
+                                        ? {
+                                            useDefault: true,
+                                            moveAsPiece: null,
+                                            straight: false,
+                                            cross: false,
+                                            jumpSelections: [],
+                                            soldierKillStraight: false
+                                          }
+                                        : { ...current, useDefault: false }
+                                    );
+                                  }}
+                                />
+                                <span className="movement-pill__face">Standard chess rules</span>
+                              </label>
+                            </div>
+
+                            <div className="movement-lab-field">
+                              <span className="movement-lab-field__label">Borrow motion from</span>
+                              <div className="movement-select-wrap">
+                                <select
+                                  className="movement-select--arena copy-movement-select"
+                                  aria-label={`Copy movement onto ${PIECE_LABELS[piece]}`}
+                                  value=""
+                                  onChange={(event) => {
+                                    const src = event.target.value;
+                                    event.target.value = "";
+                                    if (!src || src === piece) return;
+                                    setMovementDrafts((all) => ({
+                                      ...all,
+                                      [piece]: {
+                                        useDefault: false,
+                                        moveAsPiece: src,
+                                        straight: false,
+                                        cross: false,
+                                        jumpSelections: [],
+                                        soldierKillStraight: false
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <option value="">Select a piece…</option>
+                                  {piecesInPlayForMovement
+                                    .filter((p) => p !== piece && p !== "pawn")
+                                    .map((p) => (
+                                      <option key={p} value={p}>
+                                        Moves like {PIECE_LABELS[p]}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                              {d.moveAsPiece ? (
+                                <p className="movement-lab-field__note">
+                                  Uses <strong>{PIECE_LABELS[d.moveAsPiece]}</strong> vectors instead of this piece&apos;s
+                                  default.
+                                </p>
+                              ) : (
+                                <p className="movement-lab-field__note movement-lab-field__note--muted">
+                                  Optional shortcut — overrides slides / jumps until cleared by picking custom options
+                                  below.
+                                </p>
+                              )}
+                            </div>
+
+                            <div className={`movement-lab-field movement-lab-field--slides ${customLocked ? "is-locked" : ""}`}>
+                              <span className="movement-lab-field__label">Slide planes</span>
+                              <div className="movement-slide-pair">
+                                <label className="movement-pill movement-pill--compact">
+                                  <input
+                                    type="checkbox"
+                                    checked={d.straight}
+                                    disabled={customLocked}
+                                    className="movement-pill__input"
+                                    onChange={(event) =>
+                                      updateMovementDraft(piece, (current) => ({
                                         ...current,
                                         useDefault: false,
                                         moveAsPiece: null,
-                                        jumpSelections: nextSel
-                                      };
-                                    })
-                                  }
-                                >
-                                  {opt}
-                                </button>
-                              );
-                            })}
+                                        straight: event.target.checked
+                                      }))
+                                    }
+                                  />
+                                  <span className="movement-pill__face">
+                                    <span className="movement-pill__glyph">⊞</span> Orthogonal
+                                  </span>
+                                </label>
+                                <label className="movement-pill movement-pill--compact">
+                                  <input
+                                    type="checkbox"
+                                    checked={d.cross}
+                                    disabled={customLocked}
+                                    className="movement-pill__input"
+                                    onChange={(event) =>
+                                      updateMovementDraft(piece, (current) => ({
+                                        ...current,
+                                        useDefault: false,
+                                        moveAsPiece: null,
+                                        cross: event.target.checked
+                                      }))
+                                    }
+                                  />
+                                  <span className="movement-pill__face">
+                                    <span className="movement-pill__glyph">✕</span> Diagonal
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className={`movement-lab-field movement-lab-field--jumps ${customLocked ? "is-locked" : ""}`}>
+                              <span className="movement-lab-field__label">Knight-style jumps (m×n)</span>
+                              <p className="movement-lab-field__hint">Tap to arm jump offsets — combine for exotic riders.</p>
+                              <div className="jump-chip-row jump-chip-row--lab">
+                                {JUMP_OPTIONS.map((opt) => {
+                                  const on = (d.jumpSelections ?? []).includes(opt);
+                                  return (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      className={`jump-pattern-chip jump-pattern-chip--lab ${on ? "jump-pattern-chip--on" : ""}`}
+                                      disabled={customLocked}
+                                      onClick={() =>
+                                        updateMovementDraft(piece, (current) => {
+                                          const cur = current.jumpSelections ?? [];
+                                          const nextSel = cur.includes(opt)
+                                            ? cur.filter((x) => x !== opt)
+                                            : [...cur, opt];
+                                          return {
+                                            ...current,
+                                            useDefault: false,
+                                            moveAsPiece: null,
+                                            jumpSelections: nextSel
+                                          };
+                                        })
+                                      }
+                                    >
+                                      {opt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {piece === "pawn" ? (
+                              <div className={`movement-lab-field ${customLocked ? "is-locked" : ""}`}>
+                                <span className="movement-lab-field__label">Soldier tweak</span>
+                                <label className="movement-pill movement-pill--compact">
+                                  <input
+                                    type="checkbox"
+                                    checked={d.soldierKillStraight}
+                                    disabled={customLocked}
+                                    className="movement-pill__input"
+                                    onChange={(event) =>
+                                      updateMovementDraft(piece, (current) => ({
+                                        ...current,
+                                        useDefault: false,
+                                        moveAsPiece: null,
+                                        soldierKillStraight: event.target.checked
+                                      }))
+                                    }
+                                  />
+                                  <span className="movement-pill__face">Allow straight-forward capture</span>
+                                </label>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
-                        {piece === "pawn" ? (
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={d.soldierKillStraight}
-                              disabled={customLocked}
-                              onChange={(event) =>
-                                updateMovementDraft(piece, (current) => ({
-                                  ...current,
-                                  useDefault: false,
-                                  moveAsPiece: null,
-                                  soldierKillStraight: event.target.checked
-                                }))
-                              }
-                            />
-                            Soldier can capture straight forward
-                          </label>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
 
-              <div className="safe-squares-block">
+              <div className="safe-squares-block setup-card setup-card--safe">
                 <h4>Safe squares on the main board</h4>
                 <div className="safe-picker-layout">
                   <div
@@ -1410,65 +1693,42 @@ export default function App() {
                   </label>
                 </div>
               </div>
-            </>
+            </div>
           ) : null}
+
         </section>
       ) : null}
 
-      {isSetupPhase ? (
-        <div className="mode-actions">
-          {mode === "advanced" && !canStartGame ? (
-            <p className="setup-hint">
-              For each piece in use, choose &quot;Move as default&quot; or at least one custom option — or check
-              &quot;I dont want to customize movement&quot;.
-            </p>
-          ) : null}
-          {canStartGame ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (whitePlacedCounts.king !== 1) {
-                  setStartError("Place exactly one white king on the board before starting.");
-                  return;
-                }
-                if (mode === "advanced" && useCombinedPlacementBoard && blackPlacedCounts.king !== 1) {
-                  setStartError("Place exactly one black king on the board before starting.");
-                  return;
-                }
-                const reason = getStartPositionBlockReason(draftSetup.customRules);
-                if (reason) {
-                  setStartError(reason);
-                  return;
-                }
-                setStartError(null);
-                setActiveSetup(draftSetup);
-              }}
-            >
-              Start game
-            </button>
-          ) : null}
-          {startError ? <p className="setup-hint setup-error">{startError}</p> : null}
-          <button type="button" onClick={() => setMode(null)}>
-            Back to mode selection
-          </button>
-        </div>
-      ) : null}
-
       {mode === "default" || activeSetup ? (
-        <Board
-          setup={mode === "default" ? DEFAULT_SETUP : activeSetup}
-          onBackToCustomization={
-            mode !== "default" && activeSetup ? () => setActiveSetup(null) : undefined
-          }
-          onBackToModeSelect={
-            mode !== "default" && activeSetup
-              ? () => {
-                  setActiveSetup(null);
-                  setMode(null);
-                }
-              : undefined
-          }
-        />
+        mode === "default" ? (
+          <BoardDefault
+            setup={DEFAULT_SETUP}
+            activeGameMode={mode}
+            onGameModeChange={handleModeSelect}
+          />
+        ) : mode === "medium" ? (
+          <BoardMedium
+            setup={activeSetup}
+            sessionStartNonce={sessionStartNonce}
+            activeGameMode={mode}
+            onGameModeChange={handleModeSelect}
+            onBackToCustomization={() => {
+              setActiveSetup(null);
+              setSetupWorkspaceOpen(true);
+            }}
+          />
+        ) : (
+          <BoardAdvanced
+            setup={activeSetup}
+            sessionStartNonce={sessionStartNonce}
+            activeGameMode={mode}
+            onGameModeChange={handleModeSelect}
+            onBackToCustomization={() => {
+              setActiveSetup(null);
+              setSetupWorkspaceOpen(true);
+            }}
+          />
+        )
       ) : null}
     </div>
   );

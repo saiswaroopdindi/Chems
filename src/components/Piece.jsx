@@ -17,18 +17,23 @@ const PIECE_UNICODE = {
   }
 };
 
-export default function Piece({ piece, from }) {
+export default function Piece({ piece, from, draggable: draggableProp = true }) {
+  const glyph = PIECE_UNICODE[piece.color][piece.type];
   return (
     <span
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.setData("application/chess-from", JSON.stringify(from));
-      }}
-      className="piece"
+      draggable={draggableProp}
+      onDragStart={
+        draggableProp
+          ? (event) => {
+              event.dataTransfer.setData("application/chess-from", JSON.stringify(from));
+            }
+          : undefined
+      }
+      className={`piece piece--flat piece--${piece.color} piece--${piece.type}`}
       aria-label={`${piece.color} ${piece.type}`}
     >
-      {PIECE_UNICODE[piece.color][piece.type]}
+      <span className="piece-face" aria-hidden />
+      <span className="piece-glyph">{glyph}</span>
     </span>
   );
 }
-
